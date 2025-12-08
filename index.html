@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="A fast, modern media gallery for videos, GIFs, and photos with autoplay support" />
+  <title>Media Gallery</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <polyline points="21 15 16 10 5 21" />
+        </svg>
+        <span>Media Gallery</span>
+      </div>
+      <div class="header-actions">
+        <span id="media-count" class="media-count"></span>
+        <button id="select-folder-btn" class="btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            <line x1="12" y1="11" x2="12" y2="17" />
+            <line x1="9" y1="14" x2="15" y2="14" />
+          </svg>
+          Select Folder
+        </button>
+      </div>
+    </header>
+
+    <!-- Toolbar (Filter tabs + Sort) -->
+    <div id="toolbar" class="toolbar hidden">
+      <div class="filter-tabs">
+        <button class="filter-tab active" data-filter="all">All</button>
+        <button class="filter-tab" data-filter="image">Pictures</button>
+        <button class="filter-tab" data-filter="gif">GIFs</button>
+        <button class="filter-tab" data-filter="video">Videos</button>
+      </div>
+      <div class="toolbar-right">
+        <!-- Delete button (shown when items selected) -->
+        <button id="delete-selected-btn" class="btn-delete hidden">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          </svg>
+          <span id="delete-count">Delete</span>
+        </button>
+        <!-- Sort dropdown -->
+        <div class="sort-dropdown">
+          <button id="sort-btn" class="sort-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="4" y1="6" x2="20" y2="6" />
+              <line x1="4" y1="12" x2="16" y2="12" />
+              <line x1="4" y1="18" x2="12" y2="18" />
+            </svg>
+            <span id="sort-label">Sort by</span>
+            <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          <div id="sort-menu" class="sort-menu">
+            <button class="sort-option active" data-sort="name-asc">Name (A-Z)</button>
+            <button class="sort-option" data-sort="name-desc">Name (Z-A)</button>
+            <button class="sort-option" data-sort="date-newest">Date (Newest)</button>
+            <button class="sort-option" data-sort="date-oldest">Date (Oldest)</button>
+            <button class="sort-option" data-sort="size-largest">Size (Largest)</button>
+            <button class="sort-option" data-sort="size-smallest">Size (Smallest)</button>
+            <button class="sort-option" data-sort="type">Type</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Drop Zone (shown when no media) -->
+    <div id="drop-zone" class="drop-zone">
+      <div class="drop-zone-content">
+        <div class="drop-icon">
+          <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            <line x1="12" y1="11" x2="12" y2="17" />
+            <line x1="9" y1="14" x2="15" y2="14" />
+          </svg>
+        </div>
+        <h2>Drop a folder here</h2>
+        <p>or click the button above to browse</p>
+        <div class="supported-formats">
+          <span class="format-tag">MP4</span>
+          <span class="format-tag">WebM</span>
+          <span class="format-tag">GIF</span>
+          <span class="format-tag">JPG</span>
+          <span class="format-tag">PNG</span>
+          <span class="format-tag">WebP</span>
+        </div>
+      </div>
+      <input type="file" id="folder-input" webkitdirectory directory multiple hidden />
+    </div>
+
+    <!-- Media Grid -->
+    <main id="media-grid" class="media-grid"></main>
+
+    <!-- Lightbox -->
+    <div id="lightbox" class="lightbox">
+      <button id="lightbox-close" class="lightbox-btn lightbox-close" aria-label="Close">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+      <button id="lightbox-prev" class="lightbox-btn lightbox-nav lightbox-prev" aria-label="Previous">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
+      </button>
+      <button id="lightbox-next" class="lightbox-btn lightbox-nav lightbox-next" aria-label="Next">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </button>
+      <div id="lightbox-content" class="lightbox-content"></div>
+      <div id="lightbox-info" class="lightbox-info">
+        <span id="lightbox-filename"></span>
+        <span id="lightbox-counter"></span>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+        </div>
+        <h3 id="delete-modal-title">Remove from gallery?</h3>
+        <p id="delete-modal-text">This will remove the selected items from view.</p>
+        <div class="modal-actions">
+          <button id="delete-cancel" class="btn-secondary">Cancel</button>
+          <button id="delete-confirm" class="btn-danger">Remove</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>

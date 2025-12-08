@@ -148,6 +148,31 @@ body {
   transform: translateY(0);
 }
 
+/* Icon Button (refresh, etc.) */
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-icon:hover {
+  background: var(--bg-glass);
+  border-color: var(--border-hover);
+  color: var(--accent);
+}
+
+.btn-icon.spinning svg {
+  animation: spin 1s linear infinite;
+}
+
 /* ===== Folders Bar ===== */
 .folders-bar {
   display: flex;

@@ -9,6 +9,7 @@ console.log(`📍 Accessing from: ${window.location.href}`);
 // ===== DOM Elements =====
 const dropZone = document.getElementById('drop-zone');
 const addFolderBtn = document.getElementById('add-folder-btn');
+const refreshBtn = document.getElementById('refresh-btn');
 const foldersBar = document.getElementById('folders-bar');
 const foldersList = document.getElementById('folders-list');
 const mediaGrid = document.getElementById('media-grid');
@@ -619,6 +620,24 @@ browserPathInput.addEventListener('keydown', (e) => {
 });
 browserModal.addEventListener('click', (e) => {
   if (e.target === browserModal) closeBrowserModal();
+});
+
+// Refresh button
+refreshBtn.addEventListener('click', async () => {
+  if (linkedFolders.length === 0) return;
+
+  refreshBtn.classList.add('spinning');
+  console.log('🔄 Refreshing all folders...');
+
+  // Clear existing media and rescan
+  allMediaFiles = [];
+  mediaFiles = [];
+  renderGrid();
+
+  await scanAllFolders();
+
+  refreshBtn.classList.remove('spinning');
+  console.log('✅ Refresh complete');
 });
 
 // Lightbox

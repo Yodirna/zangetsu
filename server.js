@@ -15,6 +15,21 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Request logging
+app.use((req, res, next) => {
+    const start = Date.now();
+    console.log(`➡️  ${req.method} ${req.url}`);
+
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        const status = res.statusCode;
+        const statusIcon = status < 400 ? '✅' : '❌';
+        console.log(`${statusIcon} ${req.method} ${req.url} - ${status} (${duration}ms)`);
+    });
+
+    next();
+});
+
 // Data file for storing linked folders
 const DATA_FILE = join(__dirname, 'data', 'folders.json');
 
@@ -193,10 +208,22 @@ app.get('/api/scan', async (req, res) => {
 
         const absolutePath = resolve(folderPath);
         const mediaFiles = [];
+        let scannedDirs = 0;
+        let scannedFiles = 0;
+        let foundMedia = 0;
 
-        async function scanDir(dirPath) {
+        console.log(`📂 Starting scan of: ${absolutePath}`);
+        const startTime = Date.now();
+
+        async function scanDir(dirPath, depth = 0) {
             try {
                 const entries = await readdir(dirPath, { withFileTypes: true });
+                scannedDirs++;
+
+                // Log progress for deep scans
+                if (scannedDirs % 100 === 0) {
+                    console.log(`   📊 Progress: ${scannedDirs} dirs, ${scannedFiles} files, ${foundMedia} media found`);
+                }
 
                 for (const entry of entries) {
                     if (entry.name.startsWith('.')) continue;
@@ -204,30 +231,39 @@ app.get('/api/scan', async (req, res) => {
                     const fullPath = join(dirPath, entry.name);
 
                     if (entry.isDirectory()) {
-                        await scanDir(fullPath);
-                    } else if (entry.isFile() && isSupported(entry.name)) {
-                        try {
-                            const fileStats = await stat(fullPath);
-                            mediaFiles.push({
-                                name: entry.name,
-                                path: fullPath,
-                                type: getMediaType(entry.name),
-                                size: fileStats.size,
-                                modified: fileStats.mtimeMs
-                            });
-                        } catch {
-                            // Skip inaccessible files
+                        await scanDir(fullPath, depth + 1);
+                    } else if (entry.isFile()) {
+                        scannedFiles++;
+                        if (isSupported(entry.name)) {
+                            try {
+                                const fileStats = await stat(fullPath);
+                                mediaFiles.push({
+                                    name: entry.name,
+                                    path: fullPath,
+                                    type: getMediaType(entry.name),
+                                    size: fileStats.size,
+                                    modified: fileStats.mtimeMs
+                                });
+                                foundMedia++;
+                            } catch (err) {
+                                console.log(`   ⚠️  Cannot read: ${fullPath} - ${err.message}`);
+                            }
                         }
                     }
                 }
             } catch (error) {
-                console.error(`Error scanning ${dirPath}:`, error.message);
+                console.log(`   ❌ Cannot access: ${dirPath} - ${error.message}`);
             }
         }
 
         await scanDir(absolutePath);
+
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        console.log(`✅ Scan complete: ${foundMedia} media files found in ${scannedDirs} directories (${duration}s)`);
+
         res.json(mediaFiles);
     } catch (error) {
+        console.error(`❌ Scan error: ${error.message}`);
         res.status(500).json({ error: error.message });
     }
 });

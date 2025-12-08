@@ -2,8 +2,9 @@ import './style.css';
 
 // ===== DOM Elements =====
 const dropZone = document.getElementById('drop-zone');
-const folderInput = document.getElementById('folder-input');
-const selectFolderBtn = document.getElementById('select-folder-btn');
+const addFolderBtn = document.getElementById('add-folder-btn');
+const foldersBar = document.getElementById('folders-bar');
+const foldersList = document.getElementById('folders-list');
 const mediaGrid = document.getElementById('media-grid');
 const mediaCountEl = document.getElementById('media-count');
 const lightbox = document.getElementById('lightbox');
@@ -27,12 +28,67 @@ const deleteConfirmBtn = document.getElementById('delete-confirm');
 const filterTabs = document.querySelectorAll('.filter-tab');
 
 // ===== State =====
-let allMediaFiles = []; // Original list
+let linkedFolders = []; // Array of { id, name, handle }
+let allMediaFiles = []; // All media from all folders
 let mediaFiles = []; // Filtered/sorted list
-let selectedItems = new Set(); // Set of selected indices (from allMediaFiles)
+let selectedItems = new Set();
 let currentIndex = 0;
 let currentFilter = 'all';
 let currentSort = 'name-asc';
+
+// ===== IndexedDB Setup =====
+const DB_NAME = 'MediaGalleryDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'folders';
+
+function openDatabase() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+      }
+    };
+  });
+}
+
+async function saveFolder(name, handle) {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.add({ name, handle });
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function getAllFolders() {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readonly');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function removeFolder(id) {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
 
 // ===== Supported Formats =====
 const SUPPORTED_FORMATS = {
@@ -41,7 +97,6 @@ const SUPPORTED_FORMATS = {
   image: ['jpg', 'jpeg', 'png', 'webp', 'avif', 'bmp', 'svg']
 };
 
-// ===== Utility Functions =====
 function getFileExtension(filename) {
   return filename.split('.').pop().toLowerCase();
 }
@@ -80,26 +135,129 @@ const videoObserver = new IntersectionObserver((entries) => {
   });
 }, observerOptions);
 
-// ===== File Handling =====
-async function handleFiles(files) {
-  const fileList = Array.from(files);
+// ===== Folder Management =====
+async function addFolder() {
+  try {
+    // Check if File System Access API is supported
+    if (!('showDirectoryPicker' in window)) {
+      alert('Your browser does not support the File System Access API. Please use Chrome, Edge, or another Chromium-based browser.');
+      return;
+    }
 
-  // Filter supported media files
-  allMediaFiles = fileList
-    .filter(file => isSupported(file.name))
-    .map((file, idx) => ({
-      id: idx, // Unique ID for selection tracking
-      file,
-      name: file.name,
-      type: getMediaType(file.name),
-      size: file.size,
-      lastModified: file.lastModified,
-      url: URL.createObjectURL(file)
-    }));
+    // Show directory picker
+    const handle = await window.showDirectoryPicker({
+      mode: 'read'
+    });
 
-  if (allMediaFiles.length === 0) {
-    alert('No supported media files found in the selected folder.');
-    return;
+    // Check if folder is already linked
+    const existingFolder = linkedFolders.find(f => f.name === handle.name);
+    if (existingFolder) {
+      alert(`Folder "${handle.name}" is already linked.`);
+      return;
+    }
+
+    // Save to IndexedDB
+    const id = await saveFolder(handle.name, handle);
+
+    // Add to state
+    const folder = { id, name: handle.name, handle };
+    linkedFolders.push(folder);
+
+    // Update UI
+    renderFolderChips();
+    await scanAllFolders();
+    updateUI();
+
+  } catch (error) {
+    if (error.name !== 'AbortError') {
+      console.error('Error adding folder:', error);
+    }
+  }
+}
+
+async function unlinkFolder(id) {
+  // Remove from IndexedDB
+  await removeFolder(id);
+
+  // Remove from state
+  linkedFolders = linkedFolders.filter(f => f.id !== id);
+
+  // Clear media from this folder and rescan
+  await scanAllFolders();
+
+  // Update UI
+  renderFolderChips();
+  updateUI();
+}
+
+function renderFolderChips() {
+  foldersList.innerHTML = '';
+
+  linkedFolders.forEach(folder => {
+    const chip = document.createElement('div');
+    chip.className = 'folder-chip';
+    chip.dataset.id = folder.id;
+    chip.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+      </svg>
+      <span class="folder-name">${folder.name}</span>
+      <button class="remove-folder" title="Remove folder">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    `;
+
+    chip.querySelector('.remove-folder').addEventListener('click', (e) => {
+      e.stopPropagation();
+      unlinkFolder(folder.id);
+    });
+
+    foldersList.appendChild(chip);
+  });
+
+  // Show/hide folders bar
+  if (linkedFolders.length > 0) {
+    foldersBar.classList.remove('hidden');
+  } else {
+    foldersBar.classList.add('hidden');
+  }
+}
+
+// ===== Scanning Folders =====
+async function scanAllFolders() {
+  allMediaFiles = [];
+  let fileId = 0;
+
+  for (const folder of linkedFolders) {
+    const chip = document.querySelector(`.folder-chip[data-id="${folder.id}"]`);
+    if (chip) chip.classList.add('scanning');
+
+    try {
+      // Request permission if needed
+      const permission = await folder.handle.queryPermission({ mode: 'read' });
+      if (permission !== 'granted') {
+        const newPermission = await folder.handle.requestPermission({ mode: 'read' });
+        if (newPermission !== 'granted') {
+          console.warn(`Permission denied for folder: ${folder.name}`);
+          continue;
+        }
+      }
+
+      // Scan the directory
+      const files = await scanDirectory(folder.handle, folder.id);
+      files.forEach(file => {
+        file.id = fileId++;
+      });
+      allMediaFiles.push(...files);
+
+    } catch (error) {
+      console.error(`Error scanning folder ${folder.name}:`, error);
+    } finally {
+      if (chip) chip.classList.remove('scanning');
+    }
   }
 
   // Reset selection
@@ -108,27 +266,46 @@ async function handleFiles(files) {
 
   // Apply filter and sort
   applyFilterAndSort();
+}
 
-  // Update UI
-  updateMediaCount();
-  renderGrid();
+async function scanDirectory(dirHandle, folderId) {
+  const files = [];
 
-  // Hide drop zone, show grid and toolbar
-  dropZone.classList.add('hidden');
-  mediaGrid.classList.remove('hidden');
-  toolbar.classList.remove('hidden');
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === 'file') {
+      if (isSupported(entry.name)) {
+        try {
+          const file = await entry.getFile();
+          files.push({
+            folderId,
+            file,
+            name: file.name,
+            type: getMediaType(file.name),
+            size: file.size,
+            lastModified: file.lastModified,
+            url: URL.createObjectURL(file)
+          });
+        } catch (error) {
+          console.error(`Error reading file ${entry.name}:`, error);
+        }
+      }
+    } else if (entry.kind === 'directory') {
+      // Recursively scan subdirectories
+      const subFiles = await scanDirectory(entry, folderId);
+      files.push(...subFiles);
+    }
+  }
+
+  return files;
 }
 
 // ===== Filtering & Sorting =====
 function applyFilterAndSort() {
-  // Filter
   if (currentFilter === 'all') {
     mediaFiles = [...allMediaFiles];
   } else {
     mediaFiles = allMediaFiles.filter(m => m.type === currentFilter);
   }
-
-  // Sort
   sortMediaFiles();
 }
 
@@ -155,6 +332,26 @@ function sortMediaFiles() {
     case 'type':
       mediaFiles.sort((a, b) => a.type.localeCompare(b.type));
       break;
+  }
+}
+
+function updateUI() {
+  updateMediaCount();
+  renderGrid();
+
+  if (linkedFolders.length > 0 && allMediaFiles.length > 0) {
+    dropZone.classList.add('hidden');
+    mediaGrid.classList.remove('hidden');
+    toolbar.classList.remove('hidden');
+  } else if (linkedFolders.length > 0) {
+    // Has folders but no media
+    dropZone.classList.add('hidden');
+    mediaGrid.classList.remove('hidden');
+    toolbar.classList.remove('hidden');
+  } else {
+    dropZone.classList.remove('hidden');
+    mediaGrid.classList.add('hidden');
+    toolbar.classList.add('hidden');
   }
 }
 
@@ -188,11 +385,7 @@ function toggleSelection(mediaId, event) {
 function updateCardSelection(mediaId) {
   const card = document.querySelector(`.media-card[data-id="${mediaId}"]`);
   if (card) {
-    if (selectedItems.has(mediaId)) {
-      card.classList.add('selected');
-    } else {
-      card.classList.remove('selected');
-    }
+    card.classList.toggle('selected', selectedItems.has(mediaId));
   }
 }
 
@@ -214,11 +407,11 @@ function clearSelection() {
   updateDeleteButton();
 }
 
-// ===== Deletion =====
+// ===== Deletion (removes from view only) =====
 function showDeleteModal() {
   const count = selectedItems.size;
-  deleteModalTitle.textContent = `Remove ${count} item${count > 1 ? 's' : ''} from gallery?`;
-  deleteModalText.textContent = `This will remove the selected item${count > 1 ? 's' : ''} from view.`;
+  deleteModalTitle.textContent = `Remove ${count} item${count > 1 ? 's' : ''} from view?`;
+  deleteModalText.textContent = `This will hide the selected item${count > 1 ? 's' : ''} from the gallery. Files on disk will not be deleted.`;
   deleteModal.classList.add('active');
 }
 
@@ -227,34 +420,27 @@ function hideDeleteModal() {
 }
 
 function deleteSelectedItems() {
-  // Remove selected items from allMediaFiles
   allMediaFiles = allMediaFiles.filter(m => !selectedItems.has(m.id));
-
-  // Clear selection
   selectedItems.clear();
   updateDeleteButton();
-
-  // Re-apply filter and sort
   applyFilterAndSort();
-
-  // Update UI
   updateMediaCount();
   renderGrid();
-
-  // Hide modal
   hideDeleteModal();
-
-  // If no files left, show drop zone
-  if (allMediaFiles.length === 0) {
-    dropZone.classList.remove('hidden');
-    mediaGrid.classList.add('hidden');
-    toolbar.classList.add('hidden');
-  }
 }
 
 // ===== Grid Rendering =====
 function renderGrid() {
   mediaGrid.innerHTML = '';
+
+  if (mediaFiles.length === 0 && linkedFolders.length > 0) {
+    mediaGrid.innerHTML = `
+      <div class="empty-state">
+        <p>No media files found in linked folders</p>
+      </div>
+    `;
+    return;
+  }
 
   mediaFiles.forEach((media) => {
     const card = createMediaCard(media);
@@ -267,7 +453,6 @@ function createMediaCard(media) {
   card.className = 'media-card';
   card.dataset.id = media.id;
 
-  // Check if this item is selected
   if (selectedItems.has(media.id)) {
     card.classList.add('selected');
   }
@@ -299,7 +484,6 @@ function createMediaCard(media) {
     video.preload = 'metadata';
     card.appendChild(video);
 
-    // Play indicator
     const playIndicator = document.createElement('div');
     playIndicator.className = 'play-indicator';
     playIndicator.innerHTML = `
@@ -308,8 +492,6 @@ function createMediaCard(media) {
       </svg>
     `;
     card.appendChild(playIndicator);
-
-    // Observe for autoplay
     videoObserver.observe(video);
   } else {
     const img = document.createElement('img');
@@ -325,7 +507,7 @@ function createMediaCard(media) {
   filename.textContent = media.name;
   card.appendChild(filename);
 
-  // Click handler (opens lightbox)
+  // Click handler
   card.addEventListener('click', () => {
     const idx = mediaFiles.findIndex(m => m.id === media.id);
     openLightbox(idx);
@@ -345,8 +527,6 @@ function openLightbox(index) {
 function closeLightbox() {
   lightbox.classList.remove('active');
   document.body.style.overflow = '';
-
-  // Pause any video in lightbox
   const video = lightboxContent.querySelector('video');
   if (video) video.pause();
 }
@@ -376,137 +556,54 @@ function updateLightboxContent() {
 }
 
 function navigateLightbox(direction) {
-  // Pause current video if any
   const video = lightboxContent.querySelector('video');
   if (video) video.pause();
-
   currentIndex = (currentIndex + direction + mediaFiles.length) % mediaFiles.length;
   updateLightboxContent();
 }
 
-// ===== Sort Dropdown =====
+// ===== Sort & Filter =====
 function toggleSortMenu() {
-  const dropdown = sortBtn.closest('.sort-dropdown');
-  dropdown.classList.toggle('open');
+  sortBtn.closest('.sort-dropdown').classList.toggle('open');
 }
 
 function closeSortMenu() {
-  const dropdown = sortBtn.closest('.sort-dropdown');
-  dropdown.classList.remove('open');
+  sortBtn.closest('.sort-dropdown').classList.remove('open');
 }
 
 function setSortOption(sortValue, label) {
   currentSort = sortValue;
   sortLabel.textContent = label;
-
-  // Update active state
   document.querySelectorAll('.sort-option').forEach(opt => {
     opt.classList.toggle('active', opt.dataset.sort === sortValue);
   });
-
-  // Re-sort and render
   applyFilterAndSort();
   renderGrid();
   closeSortMenu();
 }
 
-// ===== Filter Tabs =====
 function setFilter(filter) {
   currentFilter = filter;
-
-  // Update active state
   filterTabs.forEach(tab => {
     tab.classList.toggle('active', tab.dataset.filter === filter);
   });
-
-  // Clear selection when changing filter
   clearSelection();
-
-  // Re-filter and render
   applyFilterAndSort();
   renderGrid();
 }
 
 // ===== Event Listeners =====
+addFolderBtn.addEventListener('click', addFolder);
 
-// Folder selection
-selectFolderBtn.addEventListener('click', () => folderInput.click());
-folderInput.addEventListener('change', (e) => handleFiles(e.target.files));
-
-// Drag and drop
-dropZone.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  dropZone.classList.add('dragover');
-});
-
-dropZone.addEventListener('dragleave', (e) => {
-  e.preventDefault();
-  dropZone.classList.remove('dragover');
-});
-
-dropZone.addEventListener('drop', async (e) => {
-  e.preventDefault();
-  dropZone.classList.remove('dragover');
-
-  const items = e.dataTransfer.items;
-  const files = [];
-
-  // Handle folder drops
-  for (const item of items) {
-    if (item.kind === 'file') {
-      const entry = item.webkitGetAsEntry?.();
-      if (entry) {
-        if (entry.isDirectory) {
-          const dirFiles = await readDirectory(entry);
-          files.push(...dirFiles);
-        } else {
-          files.push(item.getAsFile());
-        }
-      }
-    }
-  }
-
-  if (files.length > 0) {
-    handleFiles(files);
-  }
-});
-
-// Read directory recursively
-async function readDirectory(dirEntry) {
-  const files = [];
-  const reader = dirEntry.createReader();
-
-  const readEntries = () => new Promise((resolve) => {
-    reader.readEntries((entries) => resolve(entries));
-  });
-
-  let entries;
-  do {
-    entries = await readEntries();
-    for (const entry of entries) {
-      if (entry.isFile) {
-        const file = await new Promise((resolve) => entry.file(resolve));
-        files.push(file);
-      } else if (entry.isDirectory) {
-        const subFiles = await readDirectory(entry);
-        files.push(...subFiles);
-      }
-    }
-  } while (entries.length > 0);
-
-  return files;
-}
-
-// Lightbox controls
+// Lightbox
 lightboxClose.addEventListener('click', closeLightbox);
 lightboxPrev.addEventListener('click', () => navigateLightbox(-1));
 lightboxNext.addEventListener('click', () => navigateLightbox(1));
-
 lightbox.addEventListener('click', (e) => {
   if (e.target === lightbox) closeLightbox();
 });
 
-// Sort dropdown
+// Sort
 sortBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   toggleSortMenu();
@@ -519,89 +616,66 @@ document.querySelectorAll('.sort-option').forEach(option => {
   });
 });
 
-// Close sort menu when clicking outside
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.sort-dropdown')) {
     closeSortMenu();
   }
 });
 
-// Filter tabs
+// Filter
 filterTabs.forEach(tab => {
   tab.addEventListener('click', () => setFilter(tab.dataset.filter));
 });
 
-// Delete button
+// Delete
 deleteSelectedBtn.addEventListener('click', showDeleteModal);
 deleteCancelBtn.addEventListener('click', hideDeleteModal);
 deleteConfirmBtn.addEventListener('click', deleteSelectedItems);
-
-// Close modal on backdrop click
 deleteModal.addEventListener('click', (e) => {
   if (e.target === deleteModal) hideDeleteModal();
 });
 
-// Keyboard navigation
+// Keyboard
 document.addEventListener('keydown', (e) => {
-  // Handle delete modal
   if (deleteModal.classList.contains('active')) {
     if (e.key === 'Escape') hideDeleteModal();
     return;
   }
 
-  // Handle lightbox
   if (lightbox.classList.contains('active')) {
     switch (e.key) {
-      case 'Escape':
-        closeLightbox();
-        break;
-      case 'ArrowLeft':
-        navigateLightbox(-1);
-        break;
-      case 'ArrowRight':
-        navigateLightbox(1);
-        break;
+      case 'Escape': closeLightbox(); break;
+      case 'ArrowLeft': navigateLightbox(-1); break;
+      case 'ArrowRight': navigateLightbox(1); break;
     }
     return;
   }
 
-  // Handle general escapes
   if (e.key === 'Escape') {
     closeSortMenu();
     clearSelection();
   }
 });
 
-// Allow dropping on body when grid is visible
-document.body.addEventListener('dragover', (e) => {
-  e.preventDefault();
-});
+// ===== Initialize =====
+async function init() {
+  // Load linked folders from IndexedDB
+  try {
+    linkedFolders = await getAllFolders();
 
-document.body.addEventListener('drop', async (e) => {
-  if (!dropZone.classList.contains('hidden')) return;
-
-  e.preventDefault();
-  const items = e.dataTransfer.items;
-  const files = [];
-
-  for (const item of items) {
-    if (item.kind === 'file') {
-      const entry = item.webkitGetAsEntry?.();
-      if (entry) {
-        if (entry.isDirectory) {
-          const dirFiles = await readDirectory(entry);
-          files.push(...dirFiles);
-        } else {
-          files.push(item.getAsFile());
-        }
-      }
+    if (linkedFolders.length > 0) {
+      renderFolderChips();
+      await scanAllFolders();
+      updateUI();
     }
+  } catch (error) {
+    console.error('Error initializing:', error);
   }
 
-  if (files.length > 0) {
-    handleFiles(files);
+  // Hide grid initially if no folders
+  if (linkedFolders.length === 0) {
+    mediaGrid.classList.add('hidden');
   }
-});
+}
 
-// Initialize - hide media grid initially
-mediaGrid.classList.add('hidden');
+init();

@@ -26,16 +26,23 @@
       </div>
       <div class="header-actions">
         <span id="media-count" class="media-count"></span>
-        <button id="select-folder-btn" class="btn-primary">
+        <button id="add-folder-btn" class="btn-primary">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
             <line x1="12" y1="11" x2="12" y2="17" />
             <line x1="9" y1="14" x2="15" y2="14" />
           </svg>
-          Select Folder
+          Add Folder
         </button>
       </div>
     </header>
+
+    <!-- Linked Folders Bar -->
+    <div id="folders-bar" class="folders-bar hidden">
+      <div class="folders-list" id="folders-list">
+        <!-- Folder chips will be added here dynamically -->
+      </div>
+    </div>
 
     <!-- Toolbar (Filter tabs + Sort) -->
     <div id="toolbar" class="toolbar hidden">
@@ -81,7 +88,7 @@
       </div>
     </div>
 
-    <!-- Drop Zone (shown when no media) -->
+    <!-- Drop Zone (shown when no folders linked) -->
     <div id="drop-zone" class="drop-zone">
       <div class="drop-zone-content">
         <div class="drop-icon">
@@ -91,8 +98,8 @@
             <line x1="9" y1="14" x2="15" y2="14" />
           </svg>
         </div>
-        <h2>Drop a folder here</h2>
-        <p>or click the button above to browse</p>
+        <h2>Link a folder to get started</h2>
+        <p>Click "Add Folder" to permanently link folders from your filesystem</p>
         <div class="supported-formats">
           <span class="format-tag">MP4</span>
           <span class="format-tag">WebM</span>
@@ -102,7 +109,6 @@
           <span class="format-tag">WebP</span>
         </div>
       </div>
-      <input type="file" id="folder-input" webkitdirectory directory multiple hidden />
     </div>
 
     <!-- Media Grid -->

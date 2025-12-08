@@ -157,6 +157,37 @@
         </div>
       </div>
     </div>
+
+    <!-- File Browser Modal -->
+    <div id="browser-modal" class="modal">
+      <div class="browser-modal-content">
+        <div class="browser-header">
+          <h3>Select a Folder</h3>
+          <button id="browser-close" class="browser-close-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div class="browser-path">
+          <button id="browser-up" class="browser-up-btn" title="Go up">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          <input type="text" id="browser-path-input" class="browser-path-input" placeholder="/path/to/folder" />
+          <button id="browser-go" class="browser-go-btn">Go</button>
+        </div>
+        <div id="browser-list" class="browser-list">
+          <!-- Directory contents will be loaded here -->
+        </div>
+        <div class="browser-actions">
+          <button id="browser-cancel" class="btn-secondary">Cancel</button>
+          <button id="browser-select" class="btn-primary">Select This Folder</button>
+        </div>
+      </div>
+    </div>
   </div>
   <script type="module" src="/src/main.js"></script>
 </body>

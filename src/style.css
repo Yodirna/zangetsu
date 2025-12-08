@@ -959,6 +959,173 @@ body {
   box-shadow: 0 0 20px var(--danger-glow);
 }
 
+/* ===== File Browser Modal ===== */
+.browser-modal-content {
+  display: flex;
+  flex-direction: column;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  animation: modalSlide 0.3s ease;
+  overflow: hidden;
+}
+
+.browser-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border);
+}
+
+.browser-header h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.browser-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.browser-close-btn:hover {
+  background: var(--bg-glass);
+  color: var(--text-primary);
+}
+
+.browser-path {
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.browser-up-btn,
+.browser-go-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.browser-up-btn:hover,
+.browser-go-btn:hover {
+  background: var(--bg-glass);
+  border-color: var(--border-hover);
+}
+
+.browser-path-input {
+  flex: 1;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 0.85rem;
+}
+
+.browser-path-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.browser-list {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 400px;
+  padding: var(--space-sm);
+}
+
+.browser-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.browser-item:hover {
+  background: var(--bg-glass);
+}
+
+.browser-item.directory {
+  color: var(--text-primary);
+}
+
+.browser-item.file {
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.browser-item svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.browser-item.file svg {
+  color: var(--text-muted);
+}
+
+.browser-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.browser-item-size {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.browser-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.browser-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2xl);
+  color: var(--text-secondary);
+}
+
+.browser-error {
+  padding: var(--space-lg);
+  color: var(--danger);
+  text-align: center;
+}
+
 /* ===== Loading Skeleton ===== */
 .skeleton {
   background: linear-gradient(90deg,

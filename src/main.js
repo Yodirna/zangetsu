@@ -1,5 +1,11 @@
 import './style.css';
 
+// ===== Configuration =====
+// Backend API URL - change this to your server address
+const API_BASE = window.location.hostname === 'localhost'
+  ? 'http://localhost:3001'
+  : `http://${window.location.hostname}:3001`;
+
 // ===== DOM Elements =====
 const dropZone = document.getElementById('drop-zone');
 const addFolderBtn = document.getElementById('add-folder-btn');
@@ -26,110 +32,84 @@ const deleteCancelBtn = document.getElementById('delete-cancel');
 const deleteConfirmBtn = document.getElementById('delete-confirm');
 const filterTabs = document.querySelectorAll('.filter-tab');
 
+// Browser modal elements
+const browserModal = document.getElementById('browser-modal');
+const browserClose = document.getElementById('browser-close');
+const browserUp = document.getElementById('browser-up');
+const browserPathInput = document.getElementById('browser-path-input');
+const browserGo = document.getElementById('browser-go');
+const browserList = document.getElementById('browser-list');
+const browserCancel = document.getElementById('browser-cancel');
+const browserSelect = document.getElementById('browser-select');
+
 // ===== State =====
 let linkedFolders = [];
-let allMediaFiles = []; // Stores metadata + fileEntry (not loaded blob)
-let mediaFiles = []; // Filtered/sorted view
+let allMediaFiles = [];
+let mediaFiles = [];
 let selectedItems = new Set();
 let currentIndex = 0;
 let currentFilter = 'all';
 let currentSort = 'name-asc';
-let isScanning = false;
-let scanProgress = { scanned: 0, total: 0 };
+let currentBrowsePath = '/';
 
-// ===== IndexedDB Setup =====
-const DB_NAME = 'MediaGalleryDB';
-const DB_VERSION = 1;
-const STORE_NAME = 'folders';
+// ===== API Functions =====
+async function apiFetch(endpoint, options = {}) {
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers
+    }
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'API request failed');
+  }
+  return response.json();
+}
 
-function openDatabase() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
-      }
-    };
+async function apiGetFolders() {
+  return apiFetch('/api/folders');
+}
+
+async function apiAddFolder(path) {
+  return apiFetch('/api/folders', {
+    method: 'POST',
+    body: JSON.stringify({ path })
   });
 }
 
-async function saveFolder(name, handle) {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.add({ name, handle });
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+async function apiRemoveFolder(id) {
+  return apiFetch(`/api/folders/${id}`, { method: 'DELETE' });
 }
 
-async function getAllFolders() {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readonly');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.getAll();
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+async function apiBrowse(path) {
+  return apiFetch(`/api/browse?path=${encodeURIComponent(path)}`);
 }
 
-async function removeFolder(id) {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.delete(id);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
+async function apiScanFolder(path) {
+  return apiFetch(`/api/scan?path=${encodeURIComponent(path)}`);
 }
 
-// ===== Supported Formats =====
-const SUPPORTED_FORMATS = {
-  video: ['mp4', 'webm', 'ogg', 'mov'],
-  gif: ['gif'],
-  image: ['jpg', 'jpeg', 'png', 'webp', 'avif', 'bmp', 'svg']
-};
-
-function getFileExtension(filename) {
-  return filename.split('.').pop().toLowerCase();
-}
-
-function getMediaType(filename) {
-  const ext = getFileExtension(filename);
-  if (SUPPORTED_FORMATS.video.includes(ext)) return 'video';
-  if (SUPPORTED_FORMATS.gif.includes(ext)) return 'gif';
-  if (SUPPORTED_FORMATS.image.includes(ext)) return 'image';
-  return null;
-}
-
-function isSupported(filename) {
-  return getMediaType(filename) !== null;
+function getMediaUrl(filePath) {
+  return `${API_BASE}/api/media?path=${encodeURIComponent(filePath)}`;
 }
 
 // ===== Lazy Loading Observer =====
-// Only create blob URLs when cards become visible
 const lazyLoadObserver = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
     if (entry.isIntersecting) {
       const card = entry.target;
-      const mediaId = parseInt(card.dataset.id);
-      loadMediaContent(mediaId, card);
+      loadMediaContent(card);
       lazyLoadObserver.unobserve(card);
     }
   });
 }, {
   root: null,
-  rootMargin: '200px', // Pre-load slightly before visible
+  rootMargin: '200px',
   threshold: 0
 });
 
-// Video autoplay observer
 const videoObserver = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
     const video = entry.target;
@@ -144,85 +124,121 @@ const videoObserver = new IntersectionObserver((entries) => {
   });
 }, { threshold: 0.5 });
 
-// ===== Lazy Load Media Content =====
-async function loadMediaContent(mediaId, card) {
+function loadMediaContent(card) {
+  const mediaId = parseInt(card.dataset.id);
   const media = allMediaFiles.find(m => m.id === mediaId);
-  if (!media || media.url) return; // Already loaded
+  if (!media) return;
+
+  const placeholder = card.querySelector('.media-placeholder');
+  if (!placeholder) return;
+
+  if (media.type === 'video') {
+    const video = document.createElement('video');
+    video.src = getMediaUrl(media.path);
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.preload = 'metadata';
+    placeholder.replaceWith(video);
+    videoObserver.observe(video);
+  } else {
+    const img = document.createElement('img');
+    img.src = getMediaUrl(media.path);
+    img.alt = media.name;
+    img.loading = 'lazy';
+    placeholder.replaceWith(img);
+  }
+  card.classList.remove('loading');
+}
+
+// ===== File Browser Modal =====
+function openBrowserModal() {
+  browserModal.classList.add('active');
+  browseTo(currentBrowsePath);
+}
+
+function closeBrowserModal() {
+  browserModal.classList.remove('active');
+}
+
+async function browseTo(path) {
+  browserPathInput.value = path;
+  browserList.innerHTML = '<div class="browser-loading">Loading...</div>';
 
   try {
-    // Get the actual file from the file entry
-    const file = await media.fileEntry.getFile();
-    media.url = URL.createObjectURL(file);
-    media.size = file.size;
-    media.lastModified = file.lastModified;
-
-    // Update the card content
-    const placeholder = card.querySelector('.media-placeholder');
-    if (placeholder) {
-      if (media.type === 'video') {
-        const video = document.createElement('video');
-        video.src = media.url;
-        video.muted = true;
-        video.loop = true;
-        video.playsInline = true;
-        video.preload = 'metadata';
-        placeholder.replaceWith(video);
-        videoObserver.observe(video);
-      } else {
-        const img = document.createElement('img');
-        img.src = media.url;
-        img.alt = media.name;
-        img.loading = 'lazy';
-        placeholder.replaceWith(img);
-      }
-      card.classList.remove('loading');
-    }
+    const data = await apiBrowse(path);
+    currentBrowsePath = data.path;
+    browserPathInput.value = data.path;
+    renderBrowserList(data);
   } catch (error) {
-    console.error(`Error loading ${media.name}:`, error);
-    card.classList.add('error');
+    browserList.innerHTML = `<div class="browser-error">Error: ${error.message}</div>`;
+  }
+}
+
+function renderBrowserList(data) {
+  browserList.innerHTML = '';
+
+  if (data.items.length === 0) {
+    browserList.innerHTML = '<div class="browser-loading">Empty folder</div>';
+    return;
+  }
+
+  data.items.forEach(item => {
+    const div = document.createElement('div');
+    div.className = `browser-item ${item.isDirectory ? 'directory' : 'file'}`;
+
+    div.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        ${item.isDirectory
+        ? '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>'
+        : '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>'
+      }
+      </svg>
+      <span class="browser-item-name">${item.name}</span>
+      ${!item.isDirectory ? `<span class="browser-item-size">${formatSize(item.size)}</span>` : ''}
+    `;
+
+    if (item.isDirectory) {
+      div.addEventListener('click', () => browseTo(item.path));
+    }
+
+    browserList.appendChild(div);
+  });
+}
+
+function formatSize(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+async function selectCurrentFolder() {
+  try {
+    const folder = await apiAddFolder(currentBrowsePath);
+    linkedFolders.push(folder);
+    renderFolderChips();
+    await scanFolder(folder);
+    updateUI();
+    closeBrowserModal();
+  } catch (error) {
+    alert(`Error: ${error.message}`);
   }
 }
 
 // ===== Folder Management =====
-async function addFolder() {
-  try {
-    if (!('showDirectoryPicker' in window)) {
-      alert('Your browser does not support the File System Access API. Please use Chrome, Edge, or another Chromium-based browser.');
-      return;
-    }
-
-    const handle = await window.showDirectoryPicker({ mode: 'read' });
-
-    if (linkedFolders.find(f => f.name === handle.name)) {
-      alert(`Folder "${handle.name}" is already linked.`);
-      return;
-    }
-
-    const id = await saveFolder(handle.name, handle);
-    const folder = { id, name: handle.name, handle };
-    linkedFolders.push(folder);
-
-    renderFolderChips();
-    await scanFolder(folder);
-    updateUI();
-
-  } catch (error) {
-    if (error.name !== 'AbortError') {
-      console.error('Error adding folder:', error);
-    }
-  }
-}
-
 async function unlinkFolder(id) {
-  await removeFolder(id);
-  linkedFolders = linkedFolders.filter(f => f.id !== id);
-
-  // Remove media from this folder
-  allMediaFiles = allMediaFiles.filter(m => m.folderId !== id);
-  applyFilterAndSort();
-
-  renderFolderChips();
-  updateUI();
+  try {
+    await apiRemoveFolder(id);
+    linkedFolders = linkedFolders.filter(f => f.id !== id);
+    allMediaFiles = allMediaFiles.filter(m => m.folderId !== id);
+    applyFilterAndSort();
+    renderFolderChips();
+    updateUI();
+  } catch (error) {
+    console.error('Error removing folder:', error);
+  }
 }
 
 function renderFolderChips() {
@@ -259,10 +275,8 @@ function renderFolderChips() {
   foldersBar.classList.toggle('hidden', linkedFolders.length === 0);
 }
 
-// ===== Progressive Scanning =====
+// ===== Scanning =====
 async function scanAllFolders() {
-  allMediaFiles = [];
-
   for (const folder of linkedFolders) {
     await scanFolder(folder);
   }
@@ -274,83 +288,31 @@ async function scanFolder(folder) {
   renderFolderChips();
 
   try {
-    const permission = await folder.handle.queryPermission({ mode: 'read' });
-    if (permission !== 'granted') {
-      const newPermission = await folder.handle.requestPermission({ mode: 'read' });
-      if (newPermission !== 'granted') {
-        console.warn(`Permission denied for folder: ${folder.name}`);
-        folder.scanning = false;
-        renderFolderChips();
-        return;
-      }
-    }
+    const files = await apiScanFolder(folder.path);
 
-    // Scan progressively
-    await scanDirectoryProgressive(folder.handle, folder);
+    files.forEach((file, index) => {
+      const mediaItem = {
+        id: allMediaFiles.length + index,
+        folderId: folder.id,
+        name: file.name,
+        path: file.path,
+        type: file.type,
+        size: file.size,
+        lastModified: file.modified
+      };
+      allMediaFiles.push(mediaItem);
+    });
+
+    folder.scanCount = files.length;
+    applyFilterAndSort();
+    renderGrid();
+    updateMediaCount();
 
   } catch (error) {
     console.error(`Error scanning folder ${folder.name}:`, error);
   } finally {
     folder.scanning = false;
     renderFolderChips();
-  }
-}
-
-async function scanDirectoryProgressive(dirHandle, folder) {
-  const batchSize = 50; // Process in batches for better UI responsiveness
-  let batch = [];
-
-  for await (const entry of dirHandle.values()) {
-    if (entry.kind === 'file') {
-      if (isSupported(entry.name)) {
-        const mediaItem = {
-          id: allMediaFiles.length,
-          folderId: folder.id,
-          fileEntry: entry, // Store file entry, not file itself
-          name: entry.name,
-          type: getMediaType(entry.name),
-          url: null, // Will be created lazily
-          size: 0,
-          lastModified: 0
-        };
-
-        allMediaFiles.push(mediaItem);
-        batch.push(mediaItem);
-        folder.scanCount = (folder.scanCount || 0) + 1;
-
-        // Update UI in batches
-        if (batch.length >= batchSize) {
-          applyFilterAndSort();
-          renderGridIncremental(batch);
-          updateMediaCount();
-          updateFolderScanCount(folder);
-          batch = [];
-
-          // Yield to allow UI to update
-          await new Promise(resolve => setTimeout(resolve, 0));
-        }
-      }
-    } else if (entry.kind === 'directory') {
-      await scanDirectoryProgressive(entry, folder);
-    }
-  }
-
-  // Process remaining items
-  if (batch.length > 0) {
-    applyFilterAndSort();
-    renderGridIncremental(batch);
-    updateMediaCount();
-    updateFolderScanCount(folder);
-  }
-}
-
-function updateFolderScanCount(folder) {
-  const chip = document.querySelector(`.folder-chip[data-id="${folder.id}"]`);
-  if (chip) {
-    const countEl = chip.querySelector('.scan-count');
-    if (countEl) {
-      countEl.textContent = folder.scanCount;
-    }
   }
 }
 
@@ -487,7 +449,7 @@ function renderGrid() {
   if (mediaFiles.length === 0 && linkedFolders.length > 0) {
     const anyScanning = linkedFolders.some(f => f.scanning);
     if (!anyScanning) {
-      mediaGrid.innerHTML = `<div class="empty-state"><p>No media files found in linked folders</p></div>`;
+      mediaGrid.innerHTML = '<div class="empty-state"><p>No media files found in linked folders</p></div>';
     }
     return;
   }
@@ -496,29 +458,6 @@ function renderGrid() {
     const card = createMediaCard(media);
     mediaGrid.appendChild(card);
     lazyLoadObserver.observe(card);
-  });
-}
-
-function renderGridIncremental(newItems) {
-  // On first items, ensure grid is visible
-  if (mediaGrid.classList.contains('hidden') && linkedFolders.length > 0) {
-    dropZone.classList.add('hidden');
-    mediaGrid.classList.remove('hidden');
-    toolbar.classList.remove('hidden');
-  }
-
-  // Only add cards for items that match current filter
-  const filteredNewItems = currentFilter === 'all'
-    ? newItems
-    : newItems.filter(m => m.type === currentFilter);
-
-  filteredNewItems.forEach(media => {
-    // Check if card already exists
-    if (!document.querySelector(`.media-card[data-id="${media.id}"]`)) {
-      const card = createMediaCard(media);
-      mediaGrid.appendChild(card);
-      lazyLoadObserver.observe(card);
-    }
   });
 }
 
@@ -548,43 +487,16 @@ function createMediaCard(media) {
   badge.textContent = media.type === 'gif' ? 'GIF' : media.type.toUpperCase();
   card.appendChild(badge);
 
-  // Placeholder (will be replaced when loaded)
-  if (media.url) {
-    // Already loaded
-    card.classList.remove('loading');
-    if (media.type === 'video') {
-      const video = document.createElement('video');
-      video.src = media.url;
-      video.muted = true;
-      video.loop = true;
-      video.playsInline = true;
-      video.preload = 'metadata';
-      card.appendChild(video);
+  // Placeholder
+  const placeholder = document.createElement('div');
+  placeholder.className = 'media-placeholder';
+  card.appendChild(placeholder);
 
-      const playIndicator = document.createElement('div');
-      playIndicator.className = 'play-indicator';
-      playIndicator.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
-      card.appendChild(playIndicator);
-      videoObserver.observe(video);
-    } else {
-      const img = document.createElement('img');
-      img.src = media.url;
-      img.alt = media.name;
-      img.loading = 'lazy';
-      card.appendChild(img);
-    }
-  } else {
-    // Placeholder - content will be loaded lazily
-    const placeholder = document.createElement('div');
-    placeholder.className = 'media-placeholder';
-    card.appendChild(placeholder);
-
-    if (media.type === 'video') {
-      const playIndicator = document.createElement('div');
-      playIndicator.className = 'play-indicator';
-      playIndicator.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
-      card.appendChild(playIndicator);
-    }
+  if (media.type === 'video') {
+    const playIndicator = document.createElement('div');
+    playIndicator.className = 'play-indicator';
+    playIndicator.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+    card.appendChild(playIndicator);
   }
 
   // Filename overlay
@@ -603,11 +515,11 @@ function createMediaCard(media) {
 }
 
 // ===== Lightbox =====
-async function openLightbox(index) {
+function openLightbox(index) {
   currentIndex = index;
+  updateLightboxContent();
   lightbox.classList.add('active');
   document.body.style.overflow = 'hidden';
-  await updateLightboxContent();
 }
 
 function closeLightbox() {
@@ -617,35 +529,22 @@ function closeLightbox() {
   if (video) video.pause();
 }
 
-async function updateLightboxContent() {
+function updateLightboxContent() {
   const media = mediaFiles[currentIndex];
   if (!media) return;
-
-  // Load if not already loaded
-  if (!media.url) {
-    try {
-      const file = await media.fileEntry.getFile();
-      media.url = URL.createObjectURL(file);
-      media.size = file.size;
-      media.lastModified = file.lastModified;
-    } catch (error) {
-      console.error('Error loading for lightbox:', error);
-      return;
-    }
-  }
 
   lightboxContent.innerHTML = '';
 
   if (media.type === 'video') {
     const video = document.createElement('video');
-    video.src = media.url;
+    video.src = getMediaUrl(media.path);
     video.controls = true;
     video.autoplay = true;
     video.loop = true;
     lightboxContent.appendChild(video);
   } else {
     const img = document.createElement('img');
-    img.src = media.url;
+    img.src = getMediaUrl(media.path);
     img.alt = media.name;
     lightboxContent.appendChild(img);
   }
@@ -654,11 +553,11 @@ async function updateLightboxContent() {
   lightboxCounter.textContent = `${currentIndex + 1} / ${mediaFiles.length}`;
 }
 
-async function navigateLightbox(direction) {
+function navigateLightbox(direction) {
   const video = lightboxContent.querySelector('video');
   if (video) video.pause();
   currentIndex = (currentIndex + direction + mediaFiles.length) % mediaFiles.length;
-  await updateLightboxContent();
+  updateLightboxContent();
 }
 
 // ===== Sort & Filter =====
@@ -692,8 +591,25 @@ function setFilter(filter) {
 }
 
 // ===== Event Listeners =====
-addFolderBtn.addEventListener('click', addFolder);
+addFolderBtn.addEventListener('click', openBrowserModal);
 
+// Browser modal
+browserClose.addEventListener('click', closeBrowserModal);
+browserCancel.addEventListener('click', closeBrowserModal);
+browserSelect.addEventListener('click', selectCurrentFolder);
+browserUp.addEventListener('click', () => {
+  const parent = currentBrowsePath.split('/').slice(0, -1).join('/') || '/';
+  browseTo(parent);
+});
+browserGo.addEventListener('click', () => browseTo(browserPathInput.value));
+browserPathInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') browseTo(browserPathInput.value);
+});
+browserModal.addEventListener('click', (e) => {
+  if (e.target === browserModal) closeBrowserModal();
+});
+
+// Lightbox
 lightboxClose.addEventListener('click', closeLightbox);
 lightboxPrev.addEventListener('click', () => navigateLightbox(-1));
 lightboxNext.addEventListener('click', () => navigateLightbox(1));
@@ -701,6 +617,7 @@ lightbox.addEventListener('click', (e) => {
   if (e.target === lightbox) closeLightbox();
 });
 
+// Sort
 sortBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   toggleSortMenu();
@@ -719,10 +636,12 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// Filter
 filterTabs.forEach(tab => {
   tab.addEventListener('click', () => setFilter(tab.dataset.filter));
 });
 
+// Delete
 deleteSelectedBtn.addEventListener('click', showDeleteModal);
 deleteCancelBtn.addEventListener('click', hideDeleteModal);
 deleteConfirmBtn.addEventListener('click', deleteSelectedItems);
@@ -730,7 +649,13 @@ deleteModal.addEventListener('click', (e) => {
   if (e.target === deleteModal) hideDeleteModal();
 });
 
+// Keyboard
 document.addEventListener('keydown', (e) => {
+  if (browserModal.classList.contains('active')) {
+    if (e.key === 'Escape') closeBrowserModal();
+    return;
+  }
+
   if (deleteModal.classList.contains('active')) {
     if (e.key === 'Escape') hideDeleteModal();
     return;
@@ -754,7 +679,7 @@ document.addEventListener('keydown', (e) => {
 // ===== Initialize =====
 async function init() {
   try {
-    linkedFolders = await getAllFolders();
+    linkedFolders = await apiGetFolders();
 
     if (linkedFolders.length > 0) {
       renderFolderChips();
@@ -763,6 +688,9 @@ async function init() {
     }
   } catch (error) {
     console.error('Error initializing:', error);
+    // Show connection error
+    dropZone.querySelector('h2').textContent = 'Cannot connect to server';
+    dropZone.querySelector('p').textContent = `Make sure the server is running at ${API_BASE}`;
   }
 
   if (linkedFolders.length === 0) {

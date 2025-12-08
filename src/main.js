@@ -1,10 +1,10 @@
 import './style.css';
 
 // ===== Configuration =====
-// Backend API URL - change this to your server address
-const API_BASE = window.location.hostname === 'localhost'
-  ? 'http://localhost:3001'
-  : `http://${window.location.hostname}:3001`;
+// Backend API URL - uses same hostname as frontend but port 3001
+const API_BASE = `http://${window.location.hostname}:3001`;
+console.log(`🔗 API Base URL: ${API_BASE}`);
+console.log(`📍 Accessing from: ${window.location.href}`);
 
 // ===== DOM Elements =====
 const dropZone = document.getElementById('drop-zone');

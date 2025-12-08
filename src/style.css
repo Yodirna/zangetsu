@@ -487,8 +487,8 @@ body {
 /* ===== Media Grid ===== */
 .media-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--space-md);
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-lg);
   padding: var(--space-xl);
   animation: fadeIn 0.4s ease;
 }
@@ -1197,7 +1197,7 @@ body {
   }
 
   .media-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: var(--space-sm);
     padding: var(--space-md);
   }

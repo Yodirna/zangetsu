@@ -54,18 +54,30 @@ let currentBrowsePath = '/';
 
 // ===== API Functions =====
 async function apiFetch(endpoint, options = {}) {
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers
+  const url = `${API_BASE}${endpoint}`;
+  console.log(`🌐 API Request: ${options.method || 'GET'} ${url}`);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+    });
+
+    console.log(`📡 API Response: ${response.status} ${response.statusText}`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error(`❌ API Error:`, error);
+      throw new Error(error.error || 'API request failed');
     }
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'API request failed');
+    return response.json();
+  } catch (error) {
+    console.error(`❌ API Fetch Error:`, error.message);
+    throw error;
   }
-  return response.json();
 }
 
 async function apiGetFolders() {

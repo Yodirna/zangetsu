@@ -36,12 +36,13 @@ const filterTabs = document.querySelectorAll('.filter-tab');
 // Browser modal elements
 const browserModal = document.getElementById('browser-modal');
 const browserClose = document.getElementById('browser-close');
-const browserUp = document.getElementById('browser-up');
-const browserPathInput = document.getElementById('browser-path-input');
-const browserGo = document.getElementById('browser-go');
+const browserBreadcrumb = document.getElementById('browser-breadcrumb');
 const browserList = document.getElementById('browser-list');
 const browserCancel = document.getElementById('browser-cancel');
 const browserSelect = document.getElementById('browser-select');
+const sidebarLinked = document.getElementById('sidebar-linked');
+const quickHome = document.getElementById('quick-home');
+const quickRoot = document.getElementById('quick-root');
 
 // ===== State =====
 let linkedFolders = [];
@@ -165,23 +166,111 @@ function loadMediaContent(card) {
 }
 
 // ===== File Browser Modal =====
+const LAST_PATH_KEY = 'mediaGallery_lastBrowsePath';
+
+function getLastBrowsedPath() {
+  return localStorage.getItem(LAST_PATH_KEY) || '/';
+}
+
+function saveLastBrowsedPath(path) {
+  localStorage.setItem(LAST_PATH_KEY, path);
+}
+
 function openBrowserModal() {
   browserModal.classList.add('active');
-  browseTo(currentBrowsePath);
+  renderSidebarLinkedFolders();
+  browseTo(getLastBrowsedPath());
 }
 
 function closeBrowserModal() {
   browserModal.classList.remove('active');
 }
 
+function renderBreadcrumb(path) {
+  browserBreadcrumb.innerHTML = '';
+
+  // Split path into segments
+  const segments = path.split('/').filter(Boolean);
+
+  // Root button
+  const rootBtn = document.createElement('button');
+  rootBtn.className = 'breadcrumb-segment';
+  rootBtn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+    </svg>
+  `;
+  rootBtn.title = '/';
+  rootBtn.addEventListener('click', () => browseTo('/'));
+  browserBreadcrumb.appendChild(rootBtn);
+
+  // Build path progressively for each segment
+  let currentPath = '';
+  segments.forEach((segment, index) => {
+    currentPath += '/' + segment;
+    const segmentPath = currentPath; // Capture for closure
+
+    // Separator
+    const sep = document.createElement('span');
+    sep.className = 'breadcrumb-separator';
+    sep.textContent = '/';
+    browserBreadcrumb.appendChild(sep);
+
+    // Segment button
+    const btn = document.createElement('button');
+    btn.className = 'breadcrumb-segment';
+    if (index === segments.length - 1) {
+      btn.classList.add('current');
+    }
+    btn.textContent = segment;
+    btn.title = segmentPath;
+    btn.addEventListener('click', () => browseTo(segmentPath));
+    browserBreadcrumb.appendChild(btn);
+  });
+}
+
+function renderSidebarLinkedFolders() {
+  // Clear existing items (keep the title)
+  const title = sidebarLinked.querySelector('.sidebar-title');
+  sidebarLinked.innerHTML = '';
+  sidebarLinked.appendChild(title);
+
+  if (linkedFolders.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'sidebar-empty';
+    empty.textContent = 'No folders linked';
+    sidebarLinked.appendChild(empty);
+    return;
+  }
+
+  linkedFolders.forEach(folder => {
+    const item = document.createElement('button');
+    item.className = 'sidebar-item';
+    item.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+      </svg>
+      <span>${folder.name}</span>
+    `;
+    item.title = folder.path;
+    item.addEventListener('click', () => browseTo(folder.path));
+    sidebarLinked.appendChild(item);
+  });
+}
+
 async function browseTo(path) {
-  browserPathInput.value = path;
+  // Handle home directory shortcut
+  if (path === '~') {
+    path = '/home';
+  }
+
   browserList.innerHTML = '<div class="browser-loading">Loading...</div>';
 
   try {
     const data = await apiBrowse(path);
     currentBrowsePath = data.path;
-    browserPathInput.value = data.path;
+    saveLastBrowsedPath(data.path);
+    renderBreadcrumb(data.path);
     renderBrowserList(data);
   } catch (error) {
     browserList.innerHTML = `<div class="browser-error">Error: ${error.message}</div>`;
@@ -192,7 +281,7 @@ function renderBrowserList(data) {
   browserList.innerHTML = '';
 
   if (data.items.length === 0) {
-    browserList.innerHTML = '<div class="browser-loading">Empty folder</div>';
+    browserList.innerHTML = '<div class="browser-empty">This folder is empty</div>';
     return;
   }
 
@@ -212,7 +301,10 @@ function renderBrowserList(data) {
     `;
 
     if (item.isDirectory) {
-      div.addEventListener('click', () => browseTo(item.path));
+      // Double-click to navigate into folder
+      div.addEventListener('dblclick', () => browseTo(item.path));
+      // Single-click shows the path in title
+      div.title = 'Double-click to open';
     }
 
     browserList.appendChild(div);
@@ -610,14 +702,9 @@ addFolderBtn.addEventListener('click', openBrowserModal);
 browserClose.addEventListener('click', closeBrowserModal);
 browserCancel.addEventListener('click', closeBrowserModal);
 browserSelect.addEventListener('click', selectCurrentFolder);
-browserUp.addEventListener('click', () => {
-  const parent = currentBrowsePath.split('/').slice(0, -1).join('/') || '/';
-  browseTo(parent);
-});
-browserGo.addEventListener('click', () => browseTo(browserPathInput.value));
-browserPathInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') browseTo(browserPathInput.value);
-});
+// Quick access buttons
+quickHome.addEventListener('click', () => browseTo('~'));
+quickRoot.addEventListener('click', () => browseTo('/'));
 browserModal.addEventListener('click', (e) => {
   if (e.target === browserModal) closeBrowserModal();
 });

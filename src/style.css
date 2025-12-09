@@ -986,16 +986,14 @@ body {
 
 /* ===== File Browser Modal ===== */
 .browser-modal-content {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-lg);
+  width: 95%;
+  max-width: 700px;
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
-  width: 90%;
-  max-width: 600px;
-  max-height: 80vh;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
-  animation: modalSlide 0.3s ease;
   overflow: hidden;
 }
 
@@ -1032,48 +1030,130 @@ body {
   color: var(--text-primary);
 }
 
-.browser-path {
+/* Browser Body - Two Column Layout */
+.browser-body {
   display: flex;
-  gap: var(--space-sm);
-  padding: var(--space-md) var(--space-lg);
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  flex: 1;
+  overflow: hidden;
 }
 
-.browser-up-btn,
-.browser-go-btn {
+/* Quick Access Sidebar */
+.browser-sidebar {
+  width: 180px;
+  padding: var(--space-md);
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.sidebar-section {
+  margin-bottom: var(--space-lg);
+}
+
+.sidebar-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  padding: var(--space-sm) var(--space-sm);
+  margin-bottom: var(--space-xs);
+}
+
+.sidebar-item {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: var(--space-sm) var(--space-md);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm);
+  background: transparent;
+  border: none;
   border-radius: var(--radius-sm);
-  color: var(--text-primary);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.85rem;
   cursor: pointer;
   transition: all var(--transition-fast);
+  text-align: left;
 }
 
-.browser-up-btn:hover,
-.browser-go-btn:hover {
-  background: var(--bg-glass);
-  border-color: var(--border-hover);
-}
-
-.browser-path-input {
-  flex: 1;
-  padding: var(--space-sm) var(--space-md);
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+.sidebar-item:hover {
+  background: var(--bg-elevated);
   color: var(--text-primary);
-  font-family: 'SF Mono', Monaco, monospace;
-  font-size: 0.85rem;
 }
 
-.browser-path-input:focus {
-  outline: none;
-  border-color: var(--accent);
+.sidebar-item svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.sidebar-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-empty {
+  padding: var(--space-sm);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Browser Main Content */
+.browser-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Breadcrumb Navigation */
+.browser-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.breadcrumb-segment {
+  display: flex;
+  align-items: center;
+  padding: var(--space-xs) var(--space-sm);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.breadcrumb-segment:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.breadcrumb-segment.current {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.breadcrumb-segment svg {
+  color: var(--accent);
+}
+
+.breadcrumb-separator {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  user-select: none;
 }
 
 .browser-list {
@@ -1099,6 +1179,10 @@ body {
 
 .browser-item.directory {
   color: var(--text-primary);
+}
+
+.browser-item.directory:hover {
+  background: rgba(99, 102, 241, 0.1);
 }
 
 .browser-item.file {
@@ -1137,7 +1221,8 @@ body {
   background: var(--bg-secondary);
 }
 
-.browser-loading {
+.browser-loading,
+.browser-empty {
   display: flex;
   align-items: center;
   justify-content: center;

@@ -18,35 +18,47 @@ A fast, modern web-based media gallery for browsing videos, GIFs, and images fro
 
 ## 📦 Installation
 
-### Prerequisites
-- Node.js 18 or higher
-- npm
-
-### Quick Start
+### Option 1: Docker (Recommended)
 
 ```bash
 # Clone the repository
 git clone https://github.com/Yodirna/zangetsu.git
 cd zangetsu
 
-# Install dependencies
-npm install
-
-# Start the servers
-npm run server &          # Backend API (port 3001)
-npm run dev -- --host     # Frontend (port 5173)
+# Start with Docker Compose
+docker-compose up --build
 ```
 
 Then open `http://YOUR_IP:5173` in your browser.
+
+> **Note:** When running in Docker, browse folders starting at `/host/` (e.g., `/host/mnt/media`).
+
+### Option 2: Node.js
+
+**Prerequisites:** Node.js 18+
+
+```bash
+# Clone and install
+git clone https://github.com/Yodirna/zangetsu.git
+cd zangetsu
+npm install
+
+# Start both servers
+npm run server &          # Backend API (port 3001)
+npm run dev -- --host     # Frontend (port 5173)
+```
 
 ## 🚀 Usage
 
 ### Adding Folders
 
 1. Click **"Add Folder"** in the header
-2. Navigate to a folder using the file browser
-3. Type a path directly (e.g., `/home/user/videos`) or click through directories
-4. Click **"Select This Folder"** to link it
+2. Use the **sidebar** to quickly jump to Home, Root, or linked folders
+3. **Double-click** folders to navigate into them
+4. Click **breadcrumbs** at the top to go back
+5. Click **"Select This Folder"** to link it
+
+The browser remembers your last location between sessions.
 
 ### Viewing Media
 
@@ -83,6 +95,14 @@ To change the backend port:
 PORT=8080 node server.js
 ```
 
+### Docker Volumes
+
+Edit `docker-compose.yml` to customize which directories are accessible:
+```yaml
+volumes:
+  - /path/to/your/media:/host/media:ro
+```
+
 ### Firewall
 
 If accessing remotely, ensure ports 5173 and 3001 are open:
@@ -96,12 +116,15 @@ sudo ufw allow 3001
 
 ```
 zangetsu/
-├── server.js          # Express backend API
+├── server.js              # Express backend API
+├── docker-compose.yml     # Docker orchestration
+├── Dockerfile.backend     # Backend container
+├── Dockerfile.frontend    # Frontend container
 ├── src/
-│   ├── main.js        # Frontend JavaScript
-│   └── style.css      # Styles
-├── index.html         # Main HTML
-├── data/              # Stored folder links (auto-created)
+│   ├── main.js            # Frontend JavaScript
+│   └── style.css          # Styles
+├── index.html             # Main HTML
+├── data/                  # Stored folder links (auto-created)
 │   └── folders.json
 └── package.json
 ```

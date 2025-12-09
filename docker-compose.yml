@@ -11,8 +11,8 @@ services:
     volumes:
       # Persist linked folders data
       - ./data:/app/data
-      # Mount host media directories (customize as needed)
-      - /:/host:ro
+      # Mount host root with rslave propagation to see mounted filesystems
+      - /:/host:ro,rslave
     environment:
       - PORT=3001
     restart: unless-stopped

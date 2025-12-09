@@ -106,8 +106,15 @@ body {
   color: var(--text-primary);
 }
 
-.logo svg {
-  color: var(--accent);
+.logo-image {
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.2));
+  transition: transform var(--transition-base);
+}
+
+.logo:hover .logo-image {
+  transform: scale(1.1) rotate(-5deg);
+  filter: drop-shadow(0 0 12px var(--accent-glow));
 }
 
 .header-actions {

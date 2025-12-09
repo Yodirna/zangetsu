@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  # Backend API server (Express.js)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "3001:3001"
+    volumes:
+      # Persist linked folders data
+      - ./data:/app/data
+      # Mount host media directories (customize as needed)
+      - /:/host:ro
+    environment:
+      - PORT=3001
+    restart: unless-stopped
+
+  # Frontend dev server (Vite)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped

@@ -110,6 +110,7 @@ body {
   object-fit: contain;
   filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.2));
   transition: transform var(--transition-base);
+  mix-blend-mode: screen;
 }
 
 .logo:hover .logo-image {
